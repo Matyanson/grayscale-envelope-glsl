@@ -1,0 +1,60 @@
+#version 450
+
+layout (local_size_x = 16, local_size_y = 16) in;
+
+//  Two image/buffer bindings: 
+//  binding=0: input/output envelope (ping-ponged each pass)
+//  binding=1: original image A (read-only)
+layout (binding = 0, r32f) uniform readonly  image2D  uA;
+layout (binding = 1, r32f) uniform readonly  image2D  uPrev;  
+layout (binding = 2, r32f) uniform writeonly image2D  uNext;
+
+// Uniform to pick which sweep we're doing (0..3)
+uniform int uSweepID;
+uniform int uDistMethod;
+
+float getDist(vec2 dir) {
+    if(uDistMethod == 0)
+        return length(dir);  // sqrt(dx*dx + dy*dy) EUCLIDIAN
+    else 
+        return max(abs(dir.x), abs(dir.y));  // Chebyshev cost = 1
+}
+
+void main() {
+    ivec2 ij = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 dims = imageSize(uA);
+    if (ij.x < 0 || ij.y < 0 || ij.x >= dims.x || ij.y >= dims.y) 
+        return;
+
+    float center = imageLoad(uPrev, ij).r;
+    float best   = imageLoad(uA,    ij).r;  // never go below A
+
+    //   Define which neighbor offsets to consider this pass:
+    //   sweep 0 = TL->BR  reads North(0,-1), West(-1,0), NW(-1,-1), NE(+1,-1)
+    //   sweep 1 = BR->TL  reads South(0,+1), East(+1,0), SE(+1,+1), SW(-1,+1)
+    //   sweep 2 = TR->BL  reads North(0,-1), East(+1,0), NE(+1,-1), SE(+1,+1)
+    //   sweep 3 = BL->TR  reads South(0,+1), West(-1,0), SW(-1,+1), NW(-1,-1)
+    const ivec2 dirs[4][4] = ivec2[4][4](
+        ivec2[4]( ivec2( 0,-1), ivec2(-1, 0), ivec2(-1,-1), ivec2( 1,-1) ), // sweep 0
+        ivec2[4]( ivec2( 0, 1), ivec2( 1, 0), ivec2( 1, 1), ivec2(-1, 1) ), // sweep 1
+        ivec2[4]( ivec2( 0,-1), ivec2( 1, 0), ivec2( 1,-1), ivec2( 1, 1) ), // sweep 2
+        ivec2[4]( ivec2( 0, 1), ivec2(-1, 0), ivec2(-1, 1), ivec2(-1,-1) )  // sweep 3
+    );
+
+    // Examine the four "upwind" neighbors for this sweep
+    for (int k = 0; k < 4; k++) {
+        ivec2 dir = dirs[uSweepID][k];
+        ivec2 ij2 = ij + dir;
+        // bounds check
+        if (ij2.x < 0 || ij2.y < 0 || ij2.x >= dims.x || ij2.y >= dims.y)
+            continue;
+        float val = imageLoad(uPrev, ij2).r;
+        float cost = getDist(vec2(dir));  // sqrt(dx*dx + dy*dy)
+        best = max(best, val - cost);
+    }
+
+    // also compare to center (so it's non‐decreasing)
+    best = max(best, center);
+
+    imageStore(uNext, ij, vec4(best));
+}

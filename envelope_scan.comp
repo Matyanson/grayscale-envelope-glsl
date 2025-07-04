@@ -1,0 +1,72 @@
+#version 430
+
+layout (local_size_x = 1, local_size_y = 1) in;
+
+// original image
+layout(binding=0, r32f) uniform readonly image2D uA;
+// output buffer
+layout(binding=2, r32f) uniform image2D uNext;
+
+// 0=rowF,1=rowB,2=colF,3=colB
+uniform int uScanID;
+// 0=lower, 1=upper
+uniform int uMode;
+
+uniform ivec2 uSize; // (W,H)
+
+
+float heightDif = 1.0;
+// float heightDif = 0.5;
+
+float getBestVal(float prev, float curr) {
+    if(uMode == 0) {
+        return min(prev + heightDif, curr);
+    } else {
+        return max(prev - heightDif, curr);
+    }
+}
+
+void main(){
+    // SCAN ROW
+    if(uScanID < 1) {
+        // threadIdx.y = row index
+        int y = int(gl_WorkGroupID.y);
+        if(y >= uSize.y) return;
+
+        // FORWARDS
+        for(int x = 1; x < uSize.x; x++) {
+            float prev = imageLoad(uNext, ivec2(x - 1, y)).r;
+            float curr = imageLoad(uNext, ivec2(x, y)).r;
+            float best = getBestVal(prev, curr);
+            imageStore(uNext, ivec2(x, y), vec4(best));
+        }
+        // BACKWARDS
+        for(int x = uSize.x - 2; x >= 0; x--) {
+            float prev = imageLoad(uNext, ivec2(x + 1, y)).r;
+            float curr = imageLoad(uNext, ivec2(x, y)).r;
+            float best = getBestVal(prev, curr);
+            imageStore(uNext, ivec2(x, y), vec4(best));
+        }
+    }
+    // SCAN COLUMN
+    else {
+        // threadIdx.x = column index
+        int x = int(gl_WorkGroupID.x);
+        if(x >= uSize.x) return;
+
+        // FORWARDS
+        for(int y = 1; y < uSize.y; y++) {
+            float prev = imageLoad(uNext, ivec2(x, y - 1)).r;
+            float curr = imageLoad(uNext, ivec2(x, y)).r;
+            float best = getBestVal(prev, curr);
+            imageStore(uNext, ivec2(x, y), vec4(best));
+        }
+        // BACKWARDS
+        for(int y = uSize.y - 2; y >= 0; y--) {
+            float prev = imageLoad(uNext, ivec2(x, y + 1)).r;
+            float curr = imageLoad(uNext, ivec2(x, y)).r;
+            float best = getBestVal(prev, curr);
+            imageStore(uNext, ivec2(x, y), vec4(best));
+        }
+    }
+}

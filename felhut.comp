@@ -1,0 +1,153 @@
+#version 430
+
+layout (local_size_x = 1, local_size_y = 1) in;
+
+// input/output image
+layout(binding=0, r32f) uniform image2D uInput;
+
+// helper buffer: locations of hull parabolas
+layout(std430, binding = 1) buffer ParabolaXs {
+    int parabola_xs[];
+};
+// helper buffer: intersections of hull parabolas
+layout(std430, binding = 2) buffer Intersects {
+    float intersects[];
+};
+
+// 0=row, 1=col
+uniform int uScanID;
+// 0=lower, 1=upper
+uniform int uMode;
+
+uniform ivec2 uSize; // (W,H)
+uniform int uStride; // size of SSBOS per line
+
+
+float heightDif = 1.0;
+// float heightDif = 0.5;
+
+// Find horizontal intersection between parabolas at the given vertices.
+float intersect_parabolas(vec2 p, vec2 q) {
+    float x = ((q.y + q.x*q.x) - (p.y + p.x*p.x)) / (2.0*q.x - 2.0*p.x);
+    return x;
+}
+
+const float INF = +1e20;
+
+void main() {
+
+    // SCAN ROW
+    if(uScanID < 1) {
+        // threadIdx.y = row index
+        int y = int(gl_WorkGroupID.y);
+        int base = uStride * y;
+        if(y >= uSize.y) return;
+
+        parabola_xs[base + 0] = 0;
+        intersects[base + 0] = -INF;
+        intersects[base + 1] = INF;
+
+        // // Square all values
+        // for(int i = 0; i < uSize.x; i++) {
+        //     float curr = imageLoad(uInput, ivec2(i, y)).r;
+        //     imageStore(uInput, ivec2(i, y), vec4(curr * curr));
+        // }
+
+        // Build envelope (hull)
+        int k = 0;
+        for(int i = 1; i < uSize.x; i++) {
+            int par_hull_i = parabola_xs[base + k];
+
+            vec2 par_a = vec2(
+                i,
+                imageLoad(uInput, ivec2(i, y)).r
+            );
+            vec2 par_b = vec2(
+                par_hull_i,
+                imageLoad(uInput, ivec2(par_hull_i, y)).r
+            );
+            float int_i = intersect_parabolas(par_a, par_b);
+
+            while(int_i <= intersects[base + k]) {
+                k -= 1;
+                par_hull_i = parabola_xs[base + k];
+
+                par_b.x = par_hull_i;
+                par_b.y = imageLoad(uInput, ivec2(par_hull_i, y)).r;
+                int_i = intersect_parabolas(par_a, par_b);
+            }
+
+            k += 1;
+            parabola_xs[base + k] = i;
+            intersects[base + k] = int_i;
+            intersects[base + k + 1] = INF;
+        }
+
+        // Compute distances
+        k = 0;
+        for(int i = 0; i < uSize.x; i++) {
+            while(intersects[base + k + 1] < i) {
+                k += 1;
+            }
+            int par_hull_i = parabola_xs[base + k];
+            int di = i - par_hull_i;
+            float value = di*di + imageLoad(uInput, ivec2(par_hull_i, y)).r;
+            imageStore(uInput, ivec2(i, y), vec4(value));
+        }
+    }
+    // SCAN COLUMN
+    else {
+        // threadIdx.x = column index
+        int x = int(gl_WorkGroupID.x);
+        int base = uStride * x;
+        if(x >= uSize.x) return;
+        
+        parabola_xs[base + 0] = 0;
+        intersects[base + 0] = -INF;
+        intersects[base + 1] = INF;
+
+        // Build envelope (hull)
+        int k = 0;
+        for(int i = 1; i < uSize.y; i++) {
+            int par_hull_i = parabola_xs[base + k];
+
+            vec2 par_a = vec2(
+                i,
+                imageLoad(uInput, ivec2(x, i)).r
+            );
+            vec2 par_b = vec2(
+                par_hull_i,
+                imageLoad(uInput, ivec2(x, par_hull_i)).r
+            );
+            float int_i = intersect_parabolas(par_a, par_b);
+
+            while(int_i <= intersects[base + k]) {
+                k -= 1;
+                par_hull_i = parabola_xs[base + k];
+
+                par_b.x = par_hull_i;
+                par_b.y = imageLoad(uInput, ivec2(x, par_hull_i)).r;
+                int_i = intersect_parabolas(par_a, par_b);
+            }
+
+            k += 1;
+            parabola_xs[base + k] = i;
+            intersects[base + k] = int_i;
+            intersects[base + k + 1] = INF;
+        }
+
+        // Compute distances
+        k = 0;
+        for(int i = 0; i < uSize.y; i++) {
+            while(intersects[base + k + 1] < i) {
+                k += 1;
+            }
+            int par_hull_i = parabola_xs[base + k];
+            int di = i - par_hull_i;
+            float value = di*di + imageLoad(uInput, ivec2(x, par_hull_i)).r;
+            // // Square root all values
+            // imageStore(uInput, ivec2(x, i), vec4(sqrt(value)));
+            imageStore(uInput, ivec2(x, i), vec4(value));
+        }
+    }
+}
