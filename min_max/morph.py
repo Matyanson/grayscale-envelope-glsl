@@ -94,18 +94,21 @@ if __name__ == "__main__":
 
     # ---- INIT UNIFORMS ----
     loc_dist_method = glGetUniformLocation(prog, "uDistMethod")
+    loc_mode = glGetUniformLocation(prog, "uMode")
 
     # ------------------------------------------------------------
     # 4. itterate passes: dispatch compute, ping-pong buffers
     # ------------------------------------------------------------
     is_chebyshev = False
+    dist_method = 0
     min_gradient = 1.0
-    if is_chebyshev:    sweeps_needed = math.ceil(max(W, H) / min_gradient) 
+    if dist_method == 1:  sweeps_needed = math.ceil(max(W, H) / min_gradient) 
     else:               sweeps_needed = math.ceil((W + H) / min_gradient)
 
     # uniforms
     glUseProgram(prog)
-    glUniform1i(loc_dist_method, 1 if is_chebyshev else 0)
+    glUniform1i(loc_dist_method, dist_method)
+    glUniform1i(loc_mode, 1)
     glBindImageTexture(0, texA,    0, GL_FALSE, 0, GL_READ_ONLY,  GL_R32F)
     # SSBOS
     flag_ssbo = save_ssbo(np.array([0], dtype=np.uint32), 3)
