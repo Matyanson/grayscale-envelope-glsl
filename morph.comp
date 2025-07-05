@@ -9,6 +9,10 @@ layout (binding = 0, r32f) uniform readonly  image2D  uA;
 layout (binding = 1, r32f) uniform readonly  image2D  uPrev;
 layout (binding = 2, r32f) uniform writeonly image2D  uNext;
 
+layout(std430, binding = 3) buffer ConvergedFlag {
+    uint changed_flag;      // 0 = so far no pixel has changed
+};
+
 // Uniform to pick which sweep we're doing (0..3)
 uniform int uDistMethod;
 
@@ -50,4 +54,11 @@ void main() {
     best = max(best, center);
 
     imageStore(uNext, ij, vec4(best));
+
+    // set the flag if change detected    
+    if (best != center) {
+        atomicOr(changed_flag, 1u);
+        // changed_flag = 1u;
+    }
+
 }
