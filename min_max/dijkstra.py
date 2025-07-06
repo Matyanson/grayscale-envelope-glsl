@@ -64,12 +64,12 @@ def map_to_range(arr, source_range, target_range):
 # Example usage:
 img = Image.open("input/grey.png").convert("L")
 A = np.array(img, float)
-A = map_to_range(A, 255, 10)
+# A = map_to_range(A, 255, 10)
 
 L = euclid_envelope(A, lower=True)
-L = map_to_range(L, 10, 255)
+# L = map_to_range(L, 10, 255)
 U = euclid_envelope(A, lower=False)
-U = map_to_range(U, 10, 255)
+# U = map_to_range(U, 10, 255)
 
 # Clip to [0,255] and convert
 L_img = Image.fromarray(np.clip(L,0,255).astype(np.uint8), "L")

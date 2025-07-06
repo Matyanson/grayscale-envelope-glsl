@@ -1,4 +1,5 @@
 import math
+import os
 import numpy as np
 from PIL import Image
 from OpenGL.GL import *
@@ -68,15 +69,14 @@ if __name__ == "__main__":
 
     # Load input image
     img = Image.open("input/grey.png").convert("L")
-    A = np.array(img, dtype=np.float64)
+    A = np.array(img, dtype=np.float32)
 
-    input_img = np.full((5,9), 4.0, dtype=np.float32)
-    input_img[0,0] = 0.0
+    # input_img = np.full((5,9), 4.0, dtype=np.float32)
+    # input_img[0,0] = 0.0
+    input_img = A
     H, W = input_img.shape
 
     # input_img = input_img * input_img
-    
-    texA          = save_texture(input_img)                                 # original A
     texNext       = save_texture(input_img.copy())                          # output buffer
 
 
@@ -128,6 +128,7 @@ if __name__ == "__main__":
         if scanID == 0:
             # SQUARE
             run_square_shader(prog_square, texNext, 0, W, H)
+            print()
 
         elif scanID == 1:
             # ROWS
@@ -146,6 +147,7 @@ if __name__ == "__main__":
         else:
             # SQRT
             run_square_shader(prog_square, texNext, 1, W, H)
+            print()
 
 
         glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
@@ -164,10 +166,14 @@ if __name__ == "__main__":
     # ------------------------------------------------------------
     glBindTexture(GL_TEXTURE_2D, texNext)
     raw = glGetTexImage(GL_TEXTURE_2D, 0, GL_RED, GL_FLOAT)
-    result = np.frombuffer(raw, dtype=np.float32).reshape(H, W)
-    # result = np.sqrt(result)
-    print(np.round(result, 3))
+    arr = np.frombuffer(raw, dtype=np.float32).reshape(H, W)
 
+    # arr = np.sqrt(result)
+    # print(np.round(arr, 3))
+
+    lower_img = Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), mode="L")
+    lower_img.save(os.path.join("output", "lower_envelope.png"))
+    
     # ------------------------------------------------------------
     # 6. Cleanup
     # ------------------------------------------------------------
